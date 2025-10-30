@@ -112,6 +112,7 @@ func (s wordsEntry) Description() string {
 	}
 	return ""
 }
+func (s wordsEntry) SidePanel() string   { return "" } // Default: no side panel
 func (s wordsEntry) Replacement() string { return s.Title() }
 func (s wordsEntry) MoveRight() int      { return s.s.end - s.s.cursor }
 func (s wordsEntry) DeleteLeft() int     { return s.s.end - s.s.start }

@@ -15,6 +15,8 @@ func (s stringEntry) Title() string { return string(s) }
 
 func (stringEntry) Description() string { return "" }
 
+func (stringEntry) SidePanel() string { return "" }
+
 // StringValues adds the Values interface to a simple string
 // slice. There is just one category.
 func StringValues(title string, entries []string) Values {

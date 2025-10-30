@@ -37,6 +37,10 @@ type Entry interface {
 
 	// Description is the explanation for the entry.
 	Description() string
+
+	// SidePanel returns optional content to display in a side panel.
+	// If empty, no side panel is shown.
+	SidePanel() string
 }
 
 // Styles contain style definitions for the completions component.
@@ -58,6 +62,8 @@ type Styles struct {
 	DividerDot                  lipgloss.Style
 	PlaceholderDescription      lipgloss.Style
 	Description                 lipgloss.Style
+	SidePanel                   lipgloss.Style
+	SidePanelTitle              lipgloss.Style
 }
 
 // DefaultStyles returns a set of default style definitions for the
@@ -89,6 +95,13 @@ var DefaultStyles = func() (c Styles) {
 	c.DividerDot = lipgloss.NewStyle()
 	c.Description = lipgloss.NewStyle().Foreground(chalkGray).PaddingLeft(2)
 	c.PlaceholderDescription = lipgloss.NewStyle().Foreground(chalkGray)
+	c.SidePanel = lipgloss.NewStyle().
+		Padding(0, 1).
+		Foreground(chalkGray)
+	c.SidePanelTitle = lipgloss.NewStyle().
+		Foreground(chalkGreenLight).
+		Bold(true).
+		Underline(true)
 
 	return c
 }()
@@ -492,10 +505,12 @@ func (m *Model) View() string {
 		title := titleStyle.Render(m.categoryNames[i])
 		contents[i] = title + l.View()
 	}
-	result := lipgloss.JoinHorizontal(lipgloss.Top, contents...)
+	completionsView := lipgloss.JoinHorizontal(lipgloss.Top, contents...)
 
 	curSelected := m.valueLists[m.selectedList].SelectedItem()
 	var desc string
+	var sidePanel string
+
 	if curSelected == nil {
 		desc = m.Styles.PlaceholderDescription.Render("(no entry seleted)")
 	} else {
@@ -506,6 +521,23 @@ func (m *Model) View() string {
 		} else {
 			desc = m.Styles.PlaceholderDescription.Render("")
 		}
+
+		// Check if we have side panel content
+		sidePanelContent := item.SidePanel()
+		if sidePanelContent != "" {
+			// Render side panel without a title
+			sidePanelBody := m.Styles.SidePanel.Render(sidePanelContent)
+			sidePanel = sidePanelBody
+		}
+	}
+
+	// Build the main view with completions and optional side panel
+	var mainView string
+	if sidePanel != "" {
+		// Show completions and side panel side by side
+		mainView = lipgloss.JoinHorizontal(lipgloss.Top, completionsView, "  ", sidePanel)
+	} else {
+		mainView = completionsView
 	}
 
 	// Add underline separator and spacing between completions and description
@@ -514,7 +546,7 @@ func (m *Model) View() string {
 		Render(strings.Repeat("─", m.width-4)) // -4 to account for border and padding
 
 	// Combine completions, separator, spacing, and description
-	combined := result + separator + "\n" + desc
+	combined := mainView + separator + "\n" + desc
 
 	// Add border around everything
 	boxStyle := lipgloss.NewStyle().
