@@ -540,13 +540,20 @@ func (m *Model) View() string {
 		mainView = completionsView
 	}
 
-	// Add underline separator and spacing between completions and description
-	separator := lipgloss.NewStyle().
-		Foreground(lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: "#383838"}).
-		Render(strings.Repeat("─", m.width-4)) // -4 to account for border and padding
+	// Only add separator and description if there's actual description content
+	var combined string
+	if desc != "" && desc != m.Styles.PlaceholderDescription.Render("") {
+		// Add underline separator and spacing between completions and description
+		separator := lipgloss.NewStyle().
+			Foreground(lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: "#383838"}).
+			Render(strings.Repeat("─", m.width-4)) // -4 to account for border and padding
 
-	// Combine completions, separator, spacing, and description
-	combined := mainView + separator + "\n" + desc
+		// Combine completions, separator, spacing, and description
+		combined = mainView + separator + "\n" + desc
+	} else {
+		// No description, just show main view
+		combined = mainView
+	}
 
 	// Add border around everything
 	boxStyle := lipgloss.NewStyle().
