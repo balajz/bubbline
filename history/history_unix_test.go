@@ -5,7 +5,6 @@ package history
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 )
 
@@ -17,7 +16,7 @@ func Example_history() {
 	err = SaveHistory(nil, "/dev/null/notvalid")
 	fmt.Println(err)
 
-	f, err := ioutil.TempFile("", "test")
+	f, err := os.CreateTemp("", "test")
 	if err != nil {
 		fmt.Println(err)
 		return

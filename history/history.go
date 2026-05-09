@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"io"
-	"io/ioutil"
 	"os"
 )
 
@@ -40,7 +39,7 @@ func loadHistoryFromFile(f io.Reader) ([]string, error) {
 		return nil, nil
 	}
 	// Read the remainder of the file.
-	contents, err := ioutil.ReadAll(f)
+	contents, err := io.ReadAll(f)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +83,7 @@ func loadHistoryFromFile(f io.Reader) ([]string, error) {
 // SaveHistory saves a history to the specified file.
 // The file will be written in the same format as used by libedit.
 func SaveHistory(h []string, fileName string) (retErr error) {
-	f, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0666)
+	f, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o666)
 	if err != nil {
 		return err
 	}
