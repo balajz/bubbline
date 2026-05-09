@@ -227,6 +227,7 @@ type Model struct {
 		}
 	}
 	promptHidden bool
+	helpDisabled bool
 
 	help help.Model
 
@@ -295,6 +296,11 @@ func (m *Model) SetExternalEditorEnabled(enable bool, extension string) {
 func (m *Model) SetHighlighter(highlighter func(string) string) {
 	m.Highlighter = highlighter
 	m.text.SetHighlighter(highlighter)
+}
+
+// SetHelpDisabled conditionally disables the help status bar at the bottom.
+func (m *Model) SetHelpDisabled(disabled bool) {
+	m.helpDisabled = disabled
 }
 
 // SetHistory sets the history navigation list all at once.
@@ -1112,11 +1118,12 @@ func (m Model) View() string {
 		buf.WriteString(m.completions.View())
 		buf.WriteByte('\n')
 	}
+
 	buf.WriteString(m.text.View())
 	if m.currentlySearching() {
 		buf.WriteByte('\n')
 		buf.WriteString(m.hctrl.pattern.View())
-	} else {
+	} else if !m.helpDisabled {
 		buf.WriteByte('\n')
 		buf.WriteString(m.help.View(m))
 	}

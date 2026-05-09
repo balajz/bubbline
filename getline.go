@@ -139,6 +139,11 @@ func (m *Editor) SetHighlighter(highlighter func(string) string) {
 	m.Model.SetHighlighter(highlighter)
 }
 
+// SetHelpDisabled conditionally disables the help status bar at the bottom.
+func (m *Editor) SetHelpDisabled(disabled bool) {
+	m.Model.SetHelpDisabled(disabled)
+}
+
 // Values is the interface to the values displayed by the completion
 // bubble.
 type Values = complete.Values
