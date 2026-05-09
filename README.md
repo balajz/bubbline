@@ -95,7 +95,7 @@ import (
     "io"
     "log"
 
-    tea "github.com/charmbracelet/bubbletea"
+    tea "charm.land/bubbletea/v2"
     "github.com/chalk-ai/bubbline"
 )
 

@@ -5,11 +5,11 @@ import (
 	"io"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/paginator"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/paginator"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	rw "github.com/mattn/go-runewidth"
 	"github.com/muesli/reflow/truncate"
 )
@@ -69,13 +69,13 @@ type Styles struct {
 // DefaultStyles returns a set of default style definitions for the
 // completions component.
 var DefaultStyles = func() (c Styles) {
-	ls := list.DefaultStyles()
-	subtle := lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: "#383838"}
+	ls := list.DefaultStyles(true)
+	subtle := lipgloss.Color("#D9DCCF")
 
 	// Chalk-inspired colors
-	chalkGreen := lipgloss.AdaptiveColor{Light: "#00A651", Dark: "#2aa853"}
-	chalkGreenLight := lipgloss.AdaptiveColor{Light: "#9ad2a7", Dark: "#9ad2a7"} // Same as SQL keywords
-	chalkGray := lipgloss.AdaptiveColor{Light: "#666666", Dark: "#e2e1ed"}
+	chalkGreen := lipgloss.Color("#2aa853")
+	chalkGreenLight := lipgloss.Color("#9ad2a7") // Same as SQL keywords
+	chalkGray := lipgloss.Color("#e2e1ed")
 
 	c.Item = lipgloss.NewStyle().PaddingLeft(1)
 	c.SelectedItem = lipgloss.NewStyle().PaddingLeft(1).Foreground(chalkGreen).Bold(true)
@@ -85,8 +85,8 @@ var DefaultStyles = func() (c Styles) {
 	c.FocusedTitle = lipgloss.NewStyle().Foreground(chalkGreenLight).Underline(true)
 	c.BlurredTitle = c.FocusedTitle.Copy().Foreground(subtle)
 	c.Spinner = ls.Spinner
-	c.FilterPrompt = ls.FilterPrompt
-	c.FilterCursor = ls.FilterCursor
+	c.FilterPrompt = lipgloss.NewStyle()
+	c.FilterCursor = lipgloss.NewStyle()
 	c.PaginationStyle = lipgloss.NewStyle()
 	c.DefaultFilterCharacterMatch = ls.DefaultFilterCharacterMatch
 	c.ActivePaginationDot = ls.ActivePaginationDot
@@ -175,8 +175,6 @@ func (m *Model) Debug() string {
 	fmt.Fprintf(&buf, "accepted: %+v / err %v\n", m.AcceptedValue, m.Err)
 	return buf.String()
 }
-
-var _ tea.Model = (*Model)(nil)
 
 func New() Model {
 	return Model{
@@ -294,17 +292,16 @@ func (m *Model) SetValues(values Values) {
 	m.listItems = make([][]list.Item, numCats)
 	m.categoryNames = make([]string, numCats)
 	const stdHeight = 10
-	listDecorationRows :=
+	listDecorationRows := 1 +
+		max(
+			m.Styles.FocusedTitleBar.GetVerticalPadding(),
+			m.Styles.BlurredTitleBar.GetVerticalPadding()) +
+		max(
+			m.Styles.FocusedTitleBar.GetVerticalMargins(),
+			m.Styles.BlurredTitleBar.GetVerticalMargins()) +
 		1 +
-			max(
-				m.Styles.FocusedTitleBar.GetVerticalPadding(),
-				m.Styles.BlurredTitleBar.GetVerticalPadding()) +
-			max(
-				m.Styles.FocusedTitleBar.GetVerticalMargins(),
-				m.Styles.BlurredTitleBar.GetVerticalMargins()) +
-			1 +
-			m.Styles.PaginationStyle.GetVerticalPadding() +
-			m.Styles.PaginationStyle.GetVerticalMargins()
+		m.Styles.PaginationStyle.GetVerticalPadding() +
+		m.Styles.PaginationStyle.GetVerticalMargins()
 	m.maxHeight = listDecorationRows
 
 	perItemHeight := 1 + max(
@@ -351,7 +348,7 @@ func (m *Model) SetValues(values Values) {
 
 // MatchesKeys returns true when the completion
 // editor can use the given key message.
-func (m *Model) MatchesKey(msg tea.KeyMsg) bool {
+func (m *Model) MatchesKey(msg tea.KeyPressMsg) bool {
 	if !m.focused || len(m.valueLists) == 0 {
 		return false
 	}
@@ -429,7 +426,7 @@ func (m *Model) Init() tea.Cmd {
 }
 
 // Update implements the tea.Model interface.
-func (m *Model) Update(imsg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *Model) Update(imsg tea.Msg) (*Model, tea.Cmd) {
 	if len(m.valueLists) == 0 {
 		m.Err = io.EOF
 		return m, nil
@@ -437,7 +434,7 @@ func (m *Model) Update(imsg tea.Msg) (tea.Model, tea.Cmd) {
 
 	curList := m.valueLists[m.selectedList]
 	switch msg := imsg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch {
 		case key.Matches(msg, m.KeyMap.Abort):
 			m.AcceptedValue = nil
@@ -545,7 +542,7 @@ func (m *Model) View() string {
 	if desc != "" && desc != m.Styles.PlaceholderDescription.Render("") {
 		// Add underline separator and spacing between completions and description
 		separator := lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: "#383838"}).
+			Foreground(lipgloss.Color("#D9DCCF")).
 			Render(strings.Repeat("─", m.width-4)) // -4 to account for border and padding
 
 		// Combine completions, separator, spacing, and description
@@ -558,7 +555,7 @@ func (m *Model) View() string {
 	// Add border around everything
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.AdaptiveColor{Light: "#D9DCCF", Dark: "#383838"}).
+		BorderForeground(lipgloss.Color("#D9DCCF")).
 		Padding(0, 1).
 		Width(m.width)
 

@@ -37,7 +37,7 @@ func (s stringValues) Entry(_ int, entryIdx int) Entry { return StringEntry(s.en
 //
 // In go 1.18, this function would be:
 //
-//    func MapValues[T Entry](values map[string][]T, categories []string)
+//	func MapValues[T Entry](values map[string][]T, categories []string)
 //
 // Each of the map values should be a slice of objects implementing
 // the Entry interface.
@@ -68,6 +68,7 @@ func (s mapValues) NumEntries(i int) int {
 	entries := s.values.MapIndex(reflect.ValueOf(s.categories[i]))
 	return entries.Len()
 }
+
 func (s mapValues) Entry(cat, entry int) Entry {
 	slice := s.values.MapIndex(reflect.ValueOf(s.categories[cat]))
 	val := slice.Index(entry)

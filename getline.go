@@ -6,7 +6,7 @@ import (
 	"os"
 	"os/signal"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/chalk-ai/bubbline/complete"
 	"github.com/chalk-ai/bubbline/editline"
 	"github.com/chalk-ai/bubbline/history"
@@ -40,6 +40,11 @@ func (m *Editor) Update(imsg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	_, next := m.Model.Update(imsg)
 	return m, next
+}
+
+// View is part of the tea.Model interface.
+func (m *Editor) View() tea.View {
+	return tea.NewView(m.Model.View())
 }
 
 // Close should be called when the editor is not used any more.

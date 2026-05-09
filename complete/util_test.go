@@ -81,8 +81,10 @@ type myE struct{}
 
 func (myE) Title() string       { return "hello" }
 func (myE) Description() string { return "" }
+func (myE) SidePanel() string   { return "" }
 
 type myE2 struct{}
 
 func (*myE2) Title() string       { return "hello" }
 func (*myE2) Description() string { return "" }
+func (*myE2) SidePanel() string   { return "" }

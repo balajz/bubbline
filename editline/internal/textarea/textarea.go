@@ -1,8 +1,8 @@
 // The code below is imported from
-// https://github.com/charmbracelet/bubbles/tree/master/textarea
+// https://charm.land/bubbles/v2/tree/master/textarea
 // Copyright (c) 2020 Charmbracelet, Inc
 // Licensed under MIT license
-// License at https://github.com/charmbracelet/bubbles/blob/master/LICENSE
+// License at https://charm.land/bubbles/v2/blob/master/LICENSE
 
 package textarea
 
@@ -13,13 +13,12 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"charm.land/bubbles/v2/cursor"
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/atotto/clipboard"
-	"github.com/charmbracelet/bubbles/cursor"
-	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/runeutil"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	rw "github.com/mattn/go-runewidth"
 )
 
@@ -34,8 +33,10 @@ const (
 )
 
 // Internal messages for clipboard operations.
-type pasteMsg string
-type pasteErrMsg struct{ error }
+type (
+	pasteMsg    string
+	pasteErrMsg struct{ error }
+)
 
 // KeyMap is the key bindings for different actions within the textarea.
 type KeyMap struct {
@@ -127,7 +128,7 @@ type LineInfo struct {
 // depending on the focus state.
 //
 // For an introduction to styling with Lip Gloss see:
-// https://github.com/charmbracelet/lipgloss
+// https://charm.land/lipgloss/v2
 type Style struct {
 	Base             lipgloss.Style
 	CursorLine       lipgloss.Style
@@ -239,14 +240,11 @@ type Model struct {
 	// viewport is the vertically-scrollable viewport of the multi-line text
 	// input.
 	viewport *viewport.Model
-
-	// rune sanitizer for input.
-	rsan runeutil.Sanitizer
 }
 
 // New creates a new model with default settings.
 func New() Model {
-	vp := viewport.New(0, 0)
+	vp := viewport.New()
 	vp.KeyMap = viewport.KeyMap{}
 	cur := cursor.New()
 
@@ -285,21 +283,21 @@ func New() Model {
 func DefaultStyles() (Style, Style) {
 	focused := Style{
 		Base:             lipgloss.NewStyle(),
-		CursorLineNumber: lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "240"}),
-		EndOfBuffer:      lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "254", Dark: "0"}),
-		LineNumber:       lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "249", Dark: "7"}),
+		CursorLineNumber: lipgloss.NewStyle().Foreground(lipgloss.Color("240")),
+		EndOfBuffer:      lipgloss.NewStyle().Foreground(lipgloss.Color("254")),
+		LineNumber:       lipgloss.NewStyle().Foreground(lipgloss.Color("249")),
 		Placeholder:      lipgloss.NewStyle().Foreground(lipgloss.Color("240")),
 		Prompt:           lipgloss.NewStyle().Foreground(lipgloss.Color("7")),
 		Text:             lipgloss.NewStyle(),
 	}
 	blurred := Style{
 		Base:             lipgloss.NewStyle(),
-		CursorLineNumber: lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "249", Dark: "7"}),
-		EndOfBuffer:      lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "254", Dark: "0"}),
-		LineNumber:       lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "249", Dark: "7"}),
+		CursorLineNumber: lipgloss.NewStyle().Foreground(lipgloss.Color("249")),
+		EndOfBuffer:      lipgloss.NewStyle().Foreground(lipgloss.Color("254")),
+		LineNumber:       lipgloss.NewStyle().Foreground(lipgloss.Color("249")),
 		Placeholder:      lipgloss.NewStyle().Foreground(lipgloss.Color("240")),
 		Prompt:           lipgloss.NewStyle().Foreground(lipgloss.Color("7")),
-		Text:             lipgloss.NewStyle().Foreground(lipgloss.AdaptiveColor{Light: "245", Dark: "7"}),
+		Text:             lipgloss.NewStyle().Foreground(lipgloss.Color("245")),
 	}
 
 	return focused, blurred
@@ -330,11 +328,6 @@ func (m *Model) InsertRune(r rune) {
 
 // insertRunesFromUserInput inserts runes at the current cursor position.
 func (m *Model) insertRunesFromUserInput(runes []rune) {
-	// Clean up any special characters in the input provided by the
-	// clipboard. This avoids bugs due to e.g. tab characters and
-	// whatnot.
-	runes = m.san().Sanitize(runes)
-
 	var availSpace int
 	if m.CharLimit > 0 {
 		availSpace = m.CharLimit - m.Length()
@@ -586,16 +579,6 @@ func (m *Model) Reset() {
 	m.SetCursor(0)
 }
 
-// san initializes or retrieves the rune sanitizer.
-func (m *Model) san() runeutil.Sanitizer {
-	if m.rsan == nil {
-		// Textinput has all its input on a single line so collapse
-		// newlines/tabs to single spaces.
-		m.rsan = runeutil.NewSanitizer()
-	}
-	return m.rsan
-}
-
 // deleteBeforeCursor deletes all text before the cursor. Returns whether or
 // not the cursor blink should be reset.
 func (m *Model) deleteBeforeCursor() {
@@ -622,8 +605,7 @@ func (m *Model) transposeLeft() {
 	if m.col >= len(m.value[m.row]) {
 		m.SetCursor(m.col - 1)
 	}
-	m.value[m.row][m.col-1], m.value[m.row][m.col] =
-		m.value[m.row][m.col], m.value[m.row][m.col-1]
+	m.value[m.row][m.col-1], m.value[m.row][m.col] = m.value[m.row][m.col], m.value[m.row][m.col-1]
 	if m.col < len(m.value[m.row]) {
 		m.SetCursor(m.col + 1)
 	}
@@ -854,13 +836,13 @@ func (m Model) LineInfoAt(row, col int) LineInfo {
 // repositionView repositions the view of the viewport based on the defined
 // scrolling behavior.
 func (m *Model) repositionView() {
-	min := m.viewport.YOffset
-	max := min + m.viewport.Height - 1
+	min := m.viewport.YOffset()
+	max := min + m.viewport.Height() - 1
 
 	if row := m.cursorLineNumber(); row < min {
-		m.viewport.LineUp(min - row)
+		m.viewport.ScrollUp(min - row)
 	} else if row > max {
-		m.viewport.LineDown(row - max)
+		m.viewport.ScrollDown(row - max)
 	}
 }
 
@@ -890,9 +872,9 @@ func (m *Model) moveToEnd() {
 // and no more.
 func (m *Model) SetWidth(w int) {
 	if m.MaxWidth > 0 {
-		m.viewport.Width = clamp(w, minWidth, m.MaxWidth)
+		m.viewport.SetWidth(clamp(w, minWidth, m.MaxWidth))
 	} else {
-		m.viewport.Width = max(w, minWidth)
+		m.viewport.SetWidth(max(w, minWidth))
 	}
 
 	// Since the width of the textarea input is dependent on the width of the
@@ -938,10 +920,10 @@ func (m Model) Height() int {
 func (m *Model) SetHeight(h int) {
 	if m.MaxHeight > 0 {
 		m.height = clamp(h, minHeight, m.MaxHeight)
-		m.viewport.Height = clamp(h, minHeight, m.MaxHeight)
+		m.viewport.SetHeight(clamp(h, minHeight, m.MaxHeight))
 	} else {
 		m.height = max(h, minHeight)
-		m.viewport.Height = max(h, minHeight)
+		m.viewport.SetHeight(max(h, minHeight))
 	}
 }
 
@@ -1004,7 +986,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	}
 
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch {
 		case key.Matches(msg, m.KeyMap.DeleteAfterCursor):
 			m.col = clamp(m.col, 0, len(m.value[m.row]))
@@ -1074,9 +1056,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 		default:
 			if !m.overwrite {
-				m.insertRunesFromUserInput(msg.Runes)
+				m.insertRunesFromUserInput([]rune(msg.Text))
 			} else {
-				runes := m.san().Sanitize(msg.Runes)
+				runes := []rune(msg.Text)
 				for _, r := range runes {
 					m.overwriteRune(r)
 				}
@@ -1097,8 +1079,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	newRow, newCol := m.cursorLineNumber(), m.col
 	m.Cursor, cmd = m.Cursor.Update(msg)
 	if newRow != oldRow || newCol != oldCol {
-		m.Cursor.Blink = false
-		cmd = m.Cursor.BlinkCmd()
+		m.Cursor.IsBlinked = false
+		cmd = m.Cursor.Blink()
 	}
 	cmds = append(cmds, cmd)
 
@@ -1625,11 +1607,11 @@ func findPositionInHighlightedText(highlightedText string, charPos int) int {
 	if charPos <= 0 {
 		return 0
 	}
-	
+
 	plainCharCount := 0
 	bytePos := 0
 	inEscape := false
-	
+
 	for bytePos < len(highlightedText) {
 		if highlightedText[bytePos] == '\x1b' {
 			inEscape = true
@@ -1638,7 +1620,7 @@ func findPositionInHighlightedText(highlightedText string, charPos int) int {
 			bytePos++
 			continue
 		}
-		
+
 		if !inEscape {
 			if plainCharCount == charPos {
 				return bytePos
@@ -1664,7 +1646,7 @@ func findPositionInHighlightedText(highlightedText string, charPos int) int {
 		}
 		bytePos++
 	}
-	
+
 	return len(highlightedText)
 }
 

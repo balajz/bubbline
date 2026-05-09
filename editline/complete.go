@@ -105,7 +105,7 @@ type wordsEntry struct {
 	i int
 }
 
-func (s wordsEntry) Title() string       { return s.s.words[s.i] }
+func (s wordsEntry) Title() string { return s.s.words[s.i] }
 func (s wordsEntry) Description() string {
 	if s.s.descriptions != nil && s.i < len(s.s.descriptions) {
 		return s.s.descriptions[s.i]
