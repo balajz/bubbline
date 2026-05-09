@@ -1,4 +1,4 @@
-module github.com/chalk-ai/bubbline
+module github.com/Balaji01-4D/bubbline
 
 go 1.25.0
 

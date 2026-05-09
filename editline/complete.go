@@ -3,8 +3,8 @@ package editline
 import (
 	"sort"
 
-	"github.com/chalk-ai/bubbline/complete"
-	"github.com/chalk-ai/bubbline/computil"
+	"github.com/Balaji01-4D/bubbline/complete"
+	"github.com/Balaji01-4D/bubbline/computil"
 	rw "github.com/mattn/go-runewidth"
 )
 

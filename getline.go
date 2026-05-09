@@ -7,9 +7,9 @@ import (
 	"os/signal"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/chalk-ai/bubbline/complete"
-	"github.com/chalk-ai/bubbline/editline"
-	"github.com/chalk-ai/bubbline/history"
+	"github.com/Balaji01-4D/bubbline/complete"
+	"github.com/Balaji01-4D/bubbline/editline"
+	"github.com/Balaji01-4D/bubbline/history"
 )
 
 // Editor represents an input line editor.

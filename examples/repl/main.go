@@ -9,8 +9,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/alecthomas/chroma/v2/quick"
-	"github.com/chalk-ai/bubbline/computil"
-	"github.com/chalk-ai/bubbline/editline"
+	"github.com/Balaji01-4D/bubbline/computil"
+	"github.com/Balaji01-4D/bubbline/editline"
 )
 
 var pgKeywords = []string{
