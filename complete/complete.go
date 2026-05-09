@@ -7,7 +7,6 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/list"
-	"charm.land/bubbles/v2/paginator"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	rw "github.com/mattn/go-runewidth"
@@ -72,17 +71,12 @@ var DefaultStyles = func() (c Styles) {
 	ls := list.DefaultStyles(true)
 	subtle := lipgloss.Color("#D9DCCF")
 
-	// Chalk-inspired colors
-	chalkGreen := lipgloss.Color("#2aa853")
-	chalkGreenLight := lipgloss.Color("#9ad2a7") // Same as SQL keywords
-	chalkGray := lipgloss.Color("#e2e1ed")
-
 	c.Item = lipgloss.NewStyle().PaddingLeft(1)
-	c.SelectedItem = lipgloss.NewStyle().PaddingLeft(1).Foreground(chalkGreen).Bold(true)
+	c.SelectedItem = lipgloss.NewStyle().PaddingLeft(1).Foreground(lipgloss.Color("170"))
 
 	c.FocusedTitleBar = lipgloss.NewStyle()
 	c.BlurredTitleBar = lipgloss.NewStyle()
-	c.FocusedTitle = lipgloss.NewStyle().Foreground(chalkGreenLight).Underline(true)
+	c.FocusedTitle = lipgloss.NewStyle().Background(lipgloss.Color("62")).Foreground(lipgloss.Color("230"))
 	c.BlurredTitle = c.FocusedTitle.Copy().Foreground(subtle)
 	c.Spinner = ls.Spinner
 	c.FilterPrompt = lipgloss.NewStyle()
@@ -92,16 +86,9 @@ var DefaultStyles = func() (c Styles) {
 	c.ActivePaginationDot = ls.ActivePaginationDot
 	c.InactivePaginationDot = ls.InactivePaginationDot
 	c.ArabicPagination = ls.ArabicPagination
-	c.DividerDot = lipgloss.NewStyle()
-	c.Description = lipgloss.NewStyle().Foreground(chalkGray).PaddingLeft(2)
-	c.PlaceholderDescription = lipgloss.NewStyle().Foreground(chalkGray)
-	c.SidePanel = lipgloss.NewStyle().
-		Padding(0, 1).
-		Foreground(chalkGray)
-	c.SidePanelTitle = lipgloss.NewStyle().
-		Foreground(chalkGreenLight).
-		Bold(true).
-		Underline(true)
+	c.DividerDot = ls.DividerDot
+	c.Description = lipgloss.NewStyle().Bold(true)
+	c.PlaceholderDescription = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 
 	return c
 }()
@@ -246,16 +233,6 @@ func (r *renderer) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
 // SetWidth changes the width.
 func (m *Model) SetWidth(width int) {
 	m.width = width
-	// Update all list widths to match
-	// Ensure minimum width to avoid rendering issues
-	minWidth := 10
-	listWidth := width
-	if listWidth < minWidth {
-		listWidth = minWidth
-	}
-	for _, l := range m.valueLists {
-		l.SetWidth(listWidth)
-	}
 }
 
 // SetHeight changes the height.
@@ -264,11 +241,9 @@ func (m *Model) SetHeight(height int) {
 	m.height = clamp(height, 2, m.maxHeight)
 	for _, l := range m.valueLists {
 		l.SetHeight(m.height - 1)
-		// Ensure paginator shows 5 items per page
-		l.Paginator.PerPage = 4
 		// Force recomputing the keybindings, which
 		// is dependent on the page size.
-		l.SetFilteringEnabled(false)
+		l.SetFilteringEnabled(true)
 	}
 }
 
@@ -290,18 +265,19 @@ func (m *Model) SetValues(values Values) {
 	numCats := values.NumCategories()
 	m.valueLists = make([]*list.Model, numCats)
 	m.listItems = make([][]list.Item, numCats)
-	m.categoryNames = make([]string, numCats)
 	const stdHeight = 10
-	listDecorationRows := 1 +
-		max(
-			m.Styles.FocusedTitleBar.GetVerticalPadding(),
-			m.Styles.BlurredTitleBar.GetVerticalPadding()) +
-		max(
-			m.Styles.FocusedTitleBar.GetVerticalMargins(),
-			m.Styles.BlurredTitleBar.GetVerticalMargins()) +
+	listDecorationRows :=
 		1 +
-		m.Styles.PaginationStyle.GetVerticalPadding() +
-		m.Styles.PaginationStyle.GetVerticalMargins()
+			max(
+				m.Styles.FocusedTitleBar.GetVerticalPadding(),
+				m.Styles.BlurredTitleBar.GetVerticalPadding()) +
+			max(
+				m.Styles.FocusedTitleBar.GetVerticalMargins(),
+				m.Styles.BlurredTitleBar.GetVerticalMargins()) +
+			1 +
+			m.Styles.PaginationStyle.GetVerticalPadding() +
+			// (facepalm) the list widget forces a vertical margin of 1...
+			max(1, m.Styles.PaginationStyle.GetVerticalMargins())
 	m.maxHeight = listDecorationRows
 
 	perItemHeight := 1 + max(
@@ -310,26 +286,17 @@ func (m *Model) SetValues(values Values) {
 
 	for i := 0; i < numCats; i++ {
 		category := values.CategoryTitle(i)
-		m.categoryNames[i] = category
-		var itemsMaxWidth int
-		m.listItems[i], itemsMaxWidth = convertToItems(values, i)
-		// Ensure minimum width to avoid rendering issues
-		if itemsMaxWidth < 10 {
-			itemsMaxWidth = 10
-		}
-		// Limit to 5 items per page
-		itemsToShow := min(len(m.listItems[i]), 5)
-		m.maxHeight = max(m.maxHeight, itemsToShow*perItemHeight+listDecorationRows)
-		r := &renderer{m: m, listIdx: i, width: itemsMaxWidth}
-		l := list.New(m.listItems[i], r, itemsMaxWidth, stdHeight)
-		l.Title = "" // Don't use list's built-in title to avoid truncation
+		var maxWidth int
+		m.listItems[i], maxWidth = convertToItems(values, i)
+		m.maxHeight = max(m.maxHeight, len(m.listItems[i])*perItemHeight+listDecorationRows)
+		maxWidth = max(maxWidth+1, rw.StringWidth(category))
+		r := &renderer{m: m, listIdx: i, width: maxWidth}
+		l := list.New(m.listItems[i], r, maxWidth, stdHeight)
+		l.Title = category
 		l.KeyMap = m.KeyMap.KeyMap
 		l.DisableQuitKeybindings()
 		l.SetShowHelp(false)
 		l.SetShowStatusBar(false)
-		// Set the paginator to show all items (up to 5) per page
-		l.Paginator.PerPage = 4
-		l.Paginator.Type = paginator.Arabic
 		m.valueLists[i] = &l
 	}
 
@@ -487,26 +454,14 @@ func (m *Model) Update(imsg tea.Msg) (*Model, tea.Cmd) {
 
 // View implements the tea.Model interface.
 func (m *Model) View() string {
-	// Guard against rendering with invalid dimensions
-	if m.width < 10 || m.height < 2 {
-		return ""
-	}
-
 	contents := make([]string, len(m.valueLists))
 	for i, l := range m.valueLists {
-		// Render title manually to avoid truncation
-		titleStyle := m.Styles.BlurredTitle
-		if i == m.selectedList && m.focused {
-			titleStyle = m.Styles.FocusedTitle
-		}
-		title := titleStyle.Render(m.categoryNames[i])
-		contents[i] = title + l.View()
+		contents[i] = l.View()
 	}
-	completionsView := lipgloss.JoinHorizontal(lipgloss.Top, contents...)
+	result := lipgloss.JoinHorizontal(lipgloss.Top, contents...)
 
 	curSelected := m.valueLists[m.selectedList].SelectedItem()
 	var desc string
-	var sidePanel string
 
 	if curSelected == nil {
 		desc = m.Styles.PlaceholderDescription.Render("(no entry seleted)")
@@ -514,52 +469,12 @@ func (m *Model) View() string {
 		item := curSelected.(candidateItem)
 		desc = item.Description()
 		if desc != "" {
-			desc = m.Styles.Description.Render(truncate.String(desc, uint(m.width)))
+			desc = m.Styles.Description.Render(truncate.String(item.Title()+": "+desc, uint(m.width)))
 		} else {
-			desc = m.Styles.PlaceholderDescription.Render("")
-		}
-
-		// Check if we have side panel content
-		sidePanelContent := item.SidePanel()
-		if sidePanelContent != "" {
-			// Render side panel without a title
-			sidePanelBody := m.Styles.SidePanel.Render(sidePanelContent)
-			sidePanel = sidePanelBody
+			desc = m.Styles.PlaceholderDescription.Render(fmt.Sprintf("(entry %q has no description)", item.Title()))
 		}
 	}
-
-	// Build the main view with completions and optional side panel
-	var mainView string
-	if sidePanel != "" {
-		// Show completions and side panel side by side
-		mainView = lipgloss.JoinHorizontal(lipgloss.Top, completionsView, "  ", sidePanel)
-	} else {
-		mainView = completionsView
-	}
-
-	// Only add separator and description if there's actual description content
-	var combined string
-	if desc != "" && desc != m.Styles.PlaceholderDescription.Render("") {
-		// Add underline separator and spacing between completions and description
-		separator := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#D9DCCF")).
-			Render(strings.Repeat("─", m.width-4)) // -4 to account for border and padding
-
-		// Combine completions, separator, spacing, and description
-		combined = mainView + separator + "\n" + desc
-	} else {
-		// No description, just show main view
-		combined = mainView
-	}
-
-	// Add border around everything
-	boxStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#D9DCCF")).
-		Padding(0, 1).
-		Width(m.width)
-
-	return boxStyle.Render(combined)
+	return result + "\n" + desc
 }
 
 // ShortHelp is part of the help.KeyMap interface.

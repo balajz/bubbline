@@ -1114,12 +1114,11 @@ func (m Model) View() string {
 		buf.WriteByte('\n')
 	}
 
-	if m.showCompletions {
-		buf.WriteString(m.completions.View())
-		buf.WriteByte('\n')
-	}
-
 	buf.WriteString(m.text.View())
+	if m.showCompletions {
+		buf.WriteByte('\n')
+		buf.WriteString(m.completions.View())
+	}
 	if m.currentlySearching() {
 		buf.WriteByte('\n')
 		buf.WriteString(m.hctrl.pattern.View())
