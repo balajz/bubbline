@@ -97,7 +97,7 @@ func (m *Editor) GetLine() (string, error) {
 func (m *Editor) AddHistory(line string) error {
 	m.AddHistoryEntry(line)
 	if m.autoSaveHistory && m.histFile != "" {
-		return m.SaveHistory()
+		return m.AppendHistory()
 	}
 	return nil
 }
@@ -122,7 +122,28 @@ func (m *Editor) SaveHistory() error {
 	if h == nil {
 		return errors.New("history not configured")
 	}
-	return history.SaveHistory(h, m.histFile)
+	err := history.SaveHistory(h, m.histFile)
+	if err == nil {
+		m.MarkHistorySaved()
+	}
+	return err
+}
+
+// AppendHistory appends any new history entries to the file
+// previously configured with SetAutoSaveHistory.
+func (m *Editor) AppendHistory() error {
+	if m.histFile == "" {
+		return errors.New("no savefile configured")
+	}
+	h := m.GetNewHistory()
+	if len(h) == 0 {
+		return nil
+	}
+	err := history.AppendHistory(h, m.histFile)
+	if err == nil {
+		m.MarkHistorySaved()
+	}
+	return err
 }
 
 // SetAutoSaveHistory enables/disables auto-saving of entered lines

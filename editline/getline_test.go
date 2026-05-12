@@ -70,3 +70,28 @@ func TestBubblineHistory(t *testing.T) {
 		t.Errorf("expected first history entry to match")
 	}
 }
+
+func TestIncrementalHistory(t *testing.T) {
+	m := bubbline.New()
+	m.AddHistoryEntry("entry 1")
+	m.MarkHistorySaved()
+
+	newH := m.GetNewHistory()
+	if len(newH) != 0 {
+		t.Errorf("expected 0 new history entries, got: %d", len(newH))
+	}
+
+	m.AddHistoryEntry("entry 2")
+	newH = m.GetNewHistory()
+	if len(newH) != 1 {
+		t.Errorf("expected 1 new history entry, got: %d", len(newH))
+	}
+	if newH[0].Text != "entry 2" {
+		t.Errorf("expected new history entry to be 'entry 2', got: %q", newH[0].Text)
+	}
+
+	m.MarkHistorySaved()
+	if len(m.GetNewHistory()) != 0 {
+		t.Errorf("expected 0 new history entries after marking saved")
+	}
+}

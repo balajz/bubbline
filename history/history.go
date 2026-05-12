@@ -59,6 +59,23 @@ func SaveHistory(hist []editline.HistoryEntry, fileName string) (retErr error) {
 	return saveHistoryToFile(f, hist)
 }
 
+func AppendHistory(hist []editline.HistoryEntry, fileName string) (retErr error) {
+	if len(hist) == 0 {
+		return nil
+	}
+	f, err := os.OpenFile(fileName, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o666)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		closeErr := f.Close()
+		if retErr == nil {
+			retErr = closeErr
+		}
+	}()
+	return saveHistoryToFile(f, hist)
+}
+
 func saveHistoryToFile(w io.Writer, hist []editline.HistoryEntry) error {
 	enc := json.NewEncoder(w)
 	for _, entry := range hist {

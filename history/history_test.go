@@ -126,3 +126,20 @@ func TestSaveHistory(t *testing.T) {
 		}
 	}
 }
+
+func TestAppendHistory(t *testing.T) {
+	var buf bytes.Buffer
+	initial := []editline.HistoryEntry{{Text: "initial", Timestamp: t0}}
+	_ = saveHistoryToFile(&buf, initial)
+
+	newEntries := []editline.HistoryEntry{{Text: "new", Timestamp: t1}}
+	err := saveHistoryToFile(&buf, newEntries)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expected := "{\"text\":\"initial\",\"timestamp\":\"2024-06-01T12:00:00Z\"}\n{\"text\":\"new\",\"timestamp\":\"2024-06-01T12:05:00Z\"}\n"
+	if buf.String() != expected {
+		t.Errorf("expected:\n%q\ngot:\n%q", expected, buf.String())
+	}
+}

@@ -218,8 +218,9 @@ type Model struct {
 	compCandidates  Completions
 	completions     complete.Model
 
-	history []HistoryEntry
-	hctrl   struct {
+	history         []HistoryEntry
+	historySavedIdx int
+	hctrl           struct {
 		pattern textinput.Model
 		c       struct {
 			// searching is true when we're currently searching.
@@ -316,6 +317,7 @@ func (m *Model) SetHistory(h []HistoryEntry) {
 	}
 	m.history = make([]HistoryEntry, 0, len(h))
 	m.history = append(m.history, h...)
+	m.historySavedIdx = len(m.history)
 	m.checkHistoryEnabled()
 	m.resetNavCursor()
 }
@@ -345,11 +347,30 @@ func (m *Model) AddHistoryEntry(s string) {
 	}
 	// Truncate if needed.
 	if m.MaxHistorySize != 0 && len(m.history) > m.MaxHistorySize {
-		copy(m.history, m.history[1:])
-		m.history = m.history[:m.MaxHistorySize]
+		diff := len(m.history) - m.MaxHistorySize
+		m.history = m.history[diff:]
+		m.historySavedIdx -= diff
+		if m.historySavedIdx < 0 {
+			m.historySavedIdx = 0
+		}
 	}
 	m.checkHistoryEnabled()
 	m.resetNavCursor()
+}
+
+// GetNewHistory retrieves only the entries added since the last call to MarkHistorySaved
+// (or since SetHistory was called).
+func (m *Model) GetNewHistory() []HistoryEntry {
+	if m.historySavedIdx >= len(m.history) {
+		return nil
+	}
+	return m.history[m.historySavedIdx:]
+}
+
+// MarkHistorySaved marks all current history entries as saved, so they won't
+// be returned by subsequent calls to GetNewHistory.
+func (m *Model) MarkHistorySaved() {
+	m.historySavedIdx = len(m.history)
 }
 
 func (m *Model) checkHistoryEnabled() {
