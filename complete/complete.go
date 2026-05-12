@@ -266,18 +266,17 @@ func (m *Model) SetValues(values Values) {
 	m.valueLists = make([]*list.Model, numCats)
 	m.listItems = make([][]list.Item, numCats)
 	const stdHeight = 10
-	listDecorationRows :=
+	listDecorationRows := 1 +
+		max(
+			m.Styles.FocusedTitleBar.GetVerticalPadding(),
+			m.Styles.BlurredTitleBar.GetVerticalPadding()) +
+		max(
+			m.Styles.FocusedTitleBar.GetVerticalMargins(),
+			m.Styles.BlurredTitleBar.GetVerticalMargins()) +
 		1 +
-			max(
-				m.Styles.FocusedTitleBar.GetVerticalPadding(),
-				m.Styles.BlurredTitleBar.GetVerticalPadding()) +
-			max(
-				m.Styles.FocusedTitleBar.GetVerticalMargins(),
-				m.Styles.BlurredTitleBar.GetVerticalMargins()) +
-			1 +
-			m.Styles.PaginationStyle.GetVerticalPadding() +
-			// (facepalm) the list widget forces a vertical margin of 1...
-			max(1, m.Styles.PaginationStyle.GetVerticalMargins())
+		m.Styles.PaginationStyle.GetVerticalPadding() +
+		// (facepalm) the list widget forces a vertical margin of 1...
+		max(1, m.Styles.PaginationStyle.GetVerticalMargins())
 	m.maxHeight = listDecorationRows
 
 	perItemHeight := 1 + max(

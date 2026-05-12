@@ -100,7 +100,7 @@ var DefaultKeyMap = KeyMap{
 }
 
 type HistoryEntry struct {
-	Text string `json:"text"`
+	Text      string    `json:"text"`
 	Timestamp time.Time `json:"timestamp"`
 }
 
@@ -504,7 +504,6 @@ func (m *Model) incrementalSearch(nextMatch bool) (cmd tea.Cmd) {
 }
 
 func (m *Model) updateValue(value HistoryEntry, cursor int) (cmd tea.Cmd) {
-	
 	m.text.SetValue(value.Text[:cursor])
 
 	// Remember where the display cursor is.
