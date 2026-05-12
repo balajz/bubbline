@@ -66,7 +66,7 @@ func TestBubblineHistory(t *testing.T) {
 	if len(history) != 2 {
 		t.Errorf("expected 2 history entries, got: %d", len(history))
 	}
-	if history[0] != "say hello to the world" {
+	if history[0].Text != "say hello to the world" {
 		t.Errorf("expected first history entry to match")
 	}
 }

@@ -4,22 +4,56 @@ import (
 	"bytes"
 	"reflect"
 	"testing"
+	"time"
+
+	"github.com/Balaji01-4D/bubbline/editline"
+)
+
+var (
+	t0 = time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+	t1 = time.Date(2024, 6, 1, 12, 5, 0, 0, time.UTC)
 )
 
 func TestLoadHistory(t *testing.T) {
 	testCases := []struct {
 		input  string
-		exp    []string
+		exp    []editline.HistoryEntry
 		expErr string
 	}{
+		// empty file
 		{"", nil, ""},
-		{"foo", nil, ""},
-		{"_HiStOrY_V2_\nfoo\nbar", []string{"foo", "bar"}, ""},
-		{"_HiStOrY_V2_\nfoo\nbar\n", []string{"foo", "bar"}, ""},
-		{"_HiStOrY_V2_\nfo\\?o\n\134b\\01ar\\", []string{"fo\\?o", "\\b\\01ar\\"}, ""},
-		{"_HiStOrY_V2_\nfoo\\040", []string{"foo "}, ""},
-		{"_HiStOrY_V2_\nfoo\\040bar", []string{"foo bar"}, ""},
-		{"_HiStOrY_V2_\nfoo\\040bar\nbaz", []string{"foo bar", "baz"}, ""},
+		// malformed JSON — skipped entirely
+		{"notjson\n", nil, ""},
+		// single valid entry
+		{
+			`{"text":"ls -la","timestamp":"2024-06-01T12:00:00Z"}`,
+			[]editline.HistoryEntry{{Text: "ls -la", Timestamp: t0}},
+			"",
+		},
+		// two valid entries with trailing newline
+		{
+			"{\"text\":\"ls -la\",\"timestamp\":\"2024-06-01T12:00:00Z\"}\n{\"text\":\"git status\",\"timestamp\":\"2024-06-01T12:05:00Z\"}\n",
+			[]editline.HistoryEntry{
+				{Text: "ls -la", Timestamp: t0},
+				{Text: "git status", Timestamp: t1},
+			},
+			"",
+		},
+		// blank lines are skipped
+		{
+			"\n{\"text\":\"ls -la\",\"timestamp\":\"2024-06-01T12:00:00Z\"}\n\n",
+			[]editline.HistoryEntry{{Text: "ls -la", Timestamp: t0}},
+			"",
+		},
+		// malformed entries are skipped, valid ones kept
+		{
+			"{\"text\":\"ls -la\",\"timestamp\":\"2024-06-01T12:00:00Z\"}\nnotjson\n{\"text\":\"git status\",\"timestamp\":\"2024-06-01T12:05:00Z\"}",
+			[]editline.HistoryEntry{
+				{Text: "ls -la", Timestamp: t0},
+				{Text: "git status", Timestamp: t1},
+			},
+			"",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -29,7 +63,7 @@ func TestLoadHistory(t *testing.T) {
 			if err == nil {
 				t.Errorf("%q: expected error, got no error", tc.input)
 			} else if err.Error() != tc.expErr {
-				t.Errorf("%q: expected error:\n%s, got:\n%v", tc.input, tc.expErr, err)
+				t.Errorf("%q: expected error:\n%s\ngot:\n%v", tc.input, tc.expErr, err)
 			}
 			continue
 		}
@@ -44,33 +78,51 @@ func TestLoadHistory(t *testing.T) {
 
 func TestSaveHistory(t *testing.T) {
 	testCases := []struct {
-		input  []string
+		input  []editline.HistoryEntry
 		exp    string
 		expErr string
 	}{
-		{nil, "_HiStOrY_V2_\n", ""},
-		{[]string{"fo\\03o", "bar"}, "_HiStOrY_V2_\nfo\\13403o\nbar\n", ""},
-		{[]string{"foo "}, "_HiStOrY_V2_\nfoo\\040\n", ""},
-		{[]string{"foo bar"}, "_HiStOrY_V2_\nfoo\\040bar\n", ""},
-		{[]string{"foo bar", "baz"}, "_HiStOrY_V2_\nfoo\\040bar\nbaz\n", ""},
+		// nil slice — nothing written
+		{nil, "", ""},
+		// single entry
+		{
+			[]editline.HistoryEntry{{Text: "ls -la", Timestamp: t0}},
+			"{\"text\":\"ls -la\",\"timestamp\":\"2024-06-01T12:00:00Z\"}\n",
+			"",
+		},
+		// two entries
+		{
+			[]editline.HistoryEntry{
+				{Text: "ls -la", Timestamp: t0},
+				{Text: "git status", Timestamp: t1},
+			},
+			"{\"text\":\"ls -la\",\"timestamp\":\"2024-06-01T12:00:00Z\"}\n{\"text\":\"git status\",\"timestamp\":\"2024-06-01T12:05:00Z\"}\n",
+			"",
+		},
+		// entry with spaces — JSON handles it natively, no octal encoding
+		{
+			[]editline.HistoryEntry{{Text: "SELECT * FROM users", Timestamp: t0}},
+			"{\"text\":\"SELECT * FROM users\",\"timestamp\":\"2024-06-01T12:00:00Z\"}\n",
+			"",
+		},
 	}
 
 	for _, tc := range testCases {
 		var buf bytes.Buffer
-		err := saveHistoryToFile(tc.input, &buf)
+		err := saveHistoryToFile(&buf, tc.input)
 		if tc.expErr != "" {
 			if err == nil {
-				t.Errorf("%q: expected error, got no error", tc.input)
+				t.Errorf("%v: expected error, got no error", tc.input)
 			} else if err.Error() != tc.expErr {
-				t.Errorf("%q: expected error:\n%s, got:\n%v", tc.input, tc.expErr, err)
+				t.Errorf("%v: expected error:\n%s\ngot:\n%v", tc.input, tc.expErr, err)
 			}
 			continue
 		}
 		if err != nil {
-			t.Errorf("%q: expected no error, got: %v", tc.input, err)
+			t.Errorf("%v: expected no error, got: %v", tc.input, err)
 		}
 		if result := buf.String(); result != tc.exp {
-			t.Errorf("%q: expected:\n%q\ngot:\n%q", tc.input, tc.exp, result)
+			t.Errorf("%v: expected:\n%q\ngot:\n%q", tc.input, tc.exp, result)
 		}
 	}
 }

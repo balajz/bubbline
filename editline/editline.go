@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"charm.land/bubbles/v2/cursor"
 	"charm.land/bubbles/v2/help"
@@ -96,6 +97,11 @@ var DefaultKeyMap = KeyMap{
 	ReflowAll:       key.NewBinding(key.WithKeys("alt+Q", "alt+`"), key.WithHelp("M-S-q/M-`", "reflow all")),
 	Debug:           key.NewBinding(key.WithKeys("ctrl+_", "ctrl+@"), key.WithHelp("C-_/C-@", "debug mode"), key.WithDisabled()),
 	ExternalEdit:    key.NewBinding(key.WithKeys("ctrl+o"), key.WithHelp("C-.", "external edit")),
+}
+
+type HistoryEntry struct {
+	Text string `json:"text"`
+	Timestamp time.Time `json:"timestamp"`
 }
 
 // Model represents a widget that supports multi-line entry with
@@ -212,7 +218,7 @@ type Model struct {
 	compCandidates  Completions
 	completions     complete.Model
 
-	history []string
+	history []HistoryEntry
 	hctrl   struct {
 		pattern textinput.Model
 		c       struct {
@@ -222,7 +228,7 @@ type Model struct {
 			cursor      int
 			// value prior to the search starting.
 			valueSaved bool
-			prevValue  string
+			prevValue  HistoryEntry
 			prevCursor int
 		}
 	}
@@ -304,11 +310,11 @@ func (m *Model) SetHelpDisabled(disabled bool) {
 }
 
 // SetHistory sets the history navigation list all at once.
-func (m *Model) SetHistory(h []string) {
+func (m *Model) SetHistory(h []HistoryEntry) {
 	if m.MaxHistorySize != 0 && len(h) > m.MaxHistorySize {
 		h = h[len(h)-m.MaxHistorySize:]
 	}
-	m.history = make([]string, 0, len(h))
+	m.history = make([]HistoryEntry, 0, len(h))
 	m.history = append(m.history, h...)
 	m.checkHistoryEnabled()
 	m.resetNavCursor()
@@ -324,15 +330,18 @@ func (m *Model) SetDebugEnabled(enable bool) {
 }
 
 // GetHistory retrieves all the entries in the history navigation list.
-func (m *Model) GetHistory() []string {
+func (m *Model) GetHistory() []HistoryEntry {
 	return m.history
 }
 
 // AddHistoryEntry adds an entry to the history navigation list.
 func (m *Model) AddHistoryEntry(s string) {
 	// Only add a new entry if it doesn't duplicate the last one.
-	if len(m.history) == 0 || !(m.DedupHistory && s == m.history[len(m.history)-1]) {
-		m.history = append(m.history, s)
+	if len(m.history) == 0 || !(m.DedupHistory && s == m.history[len(m.history)-1].Text) {
+		m.history = append(m.history, HistoryEntry{
+			Text:      s,
+			Timestamp: time.Now(),
+		})
 	}
 	// Truncate if needed.
 	if m.MaxHistorySize != 0 && len(m.history) > m.MaxHistorySize {
@@ -433,7 +442,7 @@ func (m *Model) cancelHistorySearch() (cmd tea.Cmd) {
 func (m *Model) restoreValue() (cmd tea.Cmd) {
 	cmd = m.updateValue(m.hctrl.c.prevValue, m.hctrl.c.prevCursor)
 	m.hctrl.c.valueSaved = false
-	m.hctrl.c.prevValue = ""
+	m.hctrl.c.prevValue = HistoryEntry{}
 	m.hctrl.c.prevCursor = 0
 	m.resetNavCursor()
 	return cmd
@@ -443,7 +452,7 @@ func (m *Model) acceptSearch() {
 	m.KeyMap.AbortSearch.SetEnabled(false)
 	m.hctrl.c.searching = false
 	m.hctrl.c.valueSaved = false
-	m.hctrl.c.prevValue = ""
+	m.hctrl.c.prevValue = HistoryEntry{}
 	m.hctrl.c.prevCursor = 0
 	m.hctrl.pattern.Blur()
 	m.text.Focus()
@@ -469,7 +478,7 @@ func (m *Model) incrementalSearch(nextMatch bool) (cmd tea.Cmd) {
 	i := m.hctrl.c.cursor - 1
 	for ; i >= 0; i-- {
 		entry := m.history[i]
-		lentry := entry
+		lentry := entry.Text
 		if !m.CaseSensitiveSearch {
 			lentry = strings.ToLower(lentry)
 		}
@@ -494,12 +503,13 @@ func (m *Model) incrementalSearch(nextMatch bool) (cmd tea.Cmd) {
 	return cmd
 }
 
-func (m *Model) updateValue(value string, cursor int) (cmd tea.Cmd) {
-	m.text.SetValue(value[:cursor])
+func (m *Model) updateValue(value HistoryEntry, cursor int) (cmd tea.Cmd) {
+	
+	m.text.SetValue(value.Text[:cursor])
 
 	// Remember where the display cursor is.
 	row, col := m.text.Line(), m.text.CursorPos()
-	m.text.InsertString(value[cursor:])
+	m.text.InsertString(value.Text[cursor:])
 
 	// Reposition the display cursor to the desired position.
 	m.text.MoveTo(row, col)
@@ -568,7 +578,10 @@ func (m *Model) updatePrompt() {
 
 func (m *Model) saveValue() {
 	m.hctrl.c.valueSaved = true
-	m.hctrl.c.prevValue = m.text.Value()
+	m.hctrl.c.prevValue = HistoryEntry{
+		Text:      m.text.Value(),
+		Timestamp: time.Now(),
+	}
 	m.hctrl.c.prevCursor = m.text.CursorPos()
 }
 
@@ -581,7 +594,7 @@ func (m *Model) historyUp() (cmd tea.Cmd) {
 	}
 	m.hctrl.c.cursor--
 	entry := m.history[m.hctrl.c.cursor]
-	return tea.Batch(cmd, m.updateValue(entry, len(entry)))
+	return tea.Batch(cmd, m.updateValue(entry, len(entry.Text)))
 }
 
 func (m *Model) historyDown() (cmd tea.Cmd) {
@@ -596,7 +609,7 @@ func (m *Model) historyDown() (cmd tea.Cmd) {
 		return m.restoreValue()
 	}
 	entry := m.history[m.hctrl.c.cursor]
-	return tea.Batch(cmd, m.updateValue(entry, len(entry)))
+	return tea.Batch(cmd, m.updateValue(entry, len(entry.Text)))
 }
 
 func (m *Model) autoComplete() (cmd tea.Cmd) {
@@ -1087,7 +1100,7 @@ func (m *Model) Reset() {
 	m.showCompletions = false
 	m.completions.Blur()
 	m.hctrl.c.valueSaved = false
-	m.hctrl.c.prevValue = ""
+	m.hctrl.c.prevValue = HistoryEntry{}
 	m.hctrl.c.prevCursor = 0
 	m.text.CharLimit = m.CharLimit
 	m.text.MaxHeight = m.MaxHeight
