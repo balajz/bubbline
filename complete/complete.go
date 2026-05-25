@@ -391,6 +391,14 @@ func (m *Model) Init() tea.Cmd {
 	return nil
 }
 
+func (m *Model) totalEntries() int {
+	total := 0
+	for i := 0; i < m.values.NumCategories(); i++ {
+		total += m.values.NumEntries(i)
+	}
+	return total
+}
+
 // Update implements the tea.Model interface.
 func (m *Model) Update(imsg tea.Msg) (*Model, tea.Cmd) {
 	if len(m.valueLists) == 0 {
@@ -424,6 +432,11 @@ func (m *Model) Update(imsg tea.Msg) (*Model, tea.Cmd) {
 					m.prevCompletions()
 					imsg = nil
 				}
+			case msg.String() == "tab" && m.totalEntries() == 1:
+				v := curList.SelectedItem().(candidateItem)
+				m.AcceptedValue = v.Entry
+				m.Err = io.EOF
+				imsg = nil
 			case key.Matches(msg, m.KeyMap.AcceptCompletion):
 				v := curList.SelectedItem().(candidateItem)
 				m.AcceptedValue = v.Entry
