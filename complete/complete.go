@@ -77,7 +77,7 @@ var DefaultStyles = func() (c Styles) {
 	c.FocusedTitleBar = lipgloss.NewStyle()
 	c.BlurredTitleBar = lipgloss.NewStyle()
 	c.FocusedTitle = lipgloss.NewStyle().Background(lipgloss.Color("62")).Foreground(lipgloss.Color("230"))
-	c.BlurredTitle = c.FocusedTitle.Copy().Foreground(subtle)
+	c.BlurredTitle = c.FocusedTitle.Foreground(subtle)
 	c.Spinner = ls.Spinner
 	c.FilterPrompt = lipgloss.NewStyle()
 	c.FilterCursor = lipgloss.NewStyle()
@@ -233,6 +233,13 @@ func (r *renderer) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
 // SetWidth changes the width.
 func (m *Model) SetWidth(width int) {
 	m.width = width
+	// Distribute width evenly among all lists
+	if len(m.valueLists) > 0 {
+		perListWidth := width / len(m.valueLists)
+		for _, l := range m.valueLists {
+			l.SetWidth(perListWidth)
+		}
+	}
 }
 
 // SetHeight changes the height.
@@ -454,9 +461,6 @@ func (m *Model) Update(imsg tea.Msg) (*Model, tea.Cmd) {
 	// We don't like this - enter should just accept the current item.
 	newModel.KeyMap.AcceptWhileFiltering.SetEnabled(true)
 	// Ensure the list maintains proper dimensions after update
-	if m.width >= 10 {
-		newModel.SetWidth(m.width)
-	}
 	if m.height >= 2 {
 		newModel.SetHeight(m.height - 1)
 	}

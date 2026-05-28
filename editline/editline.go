@@ -386,6 +386,18 @@ func (m *Model) Value() string {
 	return m.text.Value()
 }
 
+// WriteRune inserts a rune into the editor at the cursor position.
+func (m *Model) WriteRune(r rune) tea.Cmd {
+	m.text.InsertRune(r)
+	return m.updateTextSz()
+}
+
+// Write inserts text into the editor at the cursor position.
+func (m *Model) Write(text string) tea.Cmd {
+	m.text.InsertString(text)
+	return m.updateTextSz()
+}
+
 // Focus sets the focus state on the model. When the model is in focus
 // it can receive keyboard input and the cursor is displayed.
 func (m *Model) Focus() tea.Cmd {
