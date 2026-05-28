@@ -20,6 +20,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/atotto/clipboard"
 	rw "github.com/mattn/go-runewidth"
+	"github.com/rivo/uniseg"
 )
 
 const (
@@ -51,6 +52,8 @@ type KeyMap struct {
 	LineNext                key.Binding
 	LinePrevious            key.Binding
 	LineStart               key.Binding
+	PageUp                  key.Binding
+	PageDown                key.Binding
 	Paste                   key.Binding
 	WordBackward            key.Binding
 	WordForward             key.Binding
@@ -74,6 +77,8 @@ var DefaultKeyMap = KeyMap{
 	DeleteCharacterForward:  key.NewBinding(key.WithKeys("delete", "ctrl+d"), key.WithHelp("C-d/del", "del next char")),
 	LineStart:               key.NewBinding(key.WithKeys("home", "ctrl+a"), key.WithHelp("C-a/home", "start of line")),
 	LineEnd:                 key.NewBinding(key.WithKeys("end", "ctrl+e"), key.WithHelp("C-e/end", "end of line")),
+	PageUp:                  key.NewBinding(key.WithKeys("pgup"), key.WithHelp("pgup", "page up")),
+	PageDown:                key.NewBinding(key.WithKeys("pgdown"), key.WithHelp("pgdown", "page down")),
 	Paste:                   key.NewBinding(key.WithKeys("ctrl+v"), key.WithHelp("C-v", "paste")),
 	InputBegin:              key.NewBinding(key.WithKeys("alt+<", "ctrl+home"), key.WithHelp("M-</C-home", "go to begin")),
 	InputEnd: key.NewBinding(key.WithKeys("alt+>", "ctrl+end"),
@@ -217,6 +222,9 @@ type Model struct {
 	// lineNumberFormat is the format string used to display line numbers.
 	lineNumberFormat string
 
+	// wrapCache is a cache for wrapped lines.
+	wrapCache map[string][][]rune
+
 	// viewport is the vertically-scrollable viewport of the multi-line text
 	// input.
 	viewport *viewport.Model
@@ -248,6 +256,7 @@ func New() Model {
 		col:              0,
 		row:              0,
 		lineNumberFormat: "%2v ",
+		wrapCache:        make(map[string][][]rune),
 
 		viewport: &vp,
 	}
@@ -410,7 +419,7 @@ func (m Model) Value() string {
 func (m *Model) Length() int {
 	var l int
 	for _, row := range m.value {
-		l += rw.StringWidth(string(row))
+		l += uniseg.StringWidth(string(row))
 	}
 	// We add len(m.value) to include the newline characters.
 	return l + len(m.value) - 1
@@ -492,6 +501,104 @@ func (m *Model) CursorUp() {
 		offset += rw.RuneWidth(m.value[m.row][m.col])
 		m.col++
 	}
+}
+
+// setCursorLineRelative moves the cursor by the given number of lines. Negative
+// values move the cursor up, positive values move the cursor down.
+func (m *Model) setCursorLineRelative(delta int) {
+	if delta == 0 {
+		return
+	}
+
+	li := m.LineInfo()
+	charOffset := max(m.lastCharOffset, li.CharOffset)
+	m.lastCharOffset = charOffset
+
+	// 2 columns to account for the trailing space wrapping.
+	const trailingSpace = 2
+
+	if delta > 0 {
+		// Moving down.
+		for i := 0; i < delta; i++ {
+			if li.RowOffset+1 >= li.Height && m.row < len(m.value)-1 {
+				m.row++
+				m.col = 0
+			} else {
+				// Move the cursor to the start of the next virtual line.
+				m.col = min(li.StartColumn+li.Width+trailingSpace, len(m.value[m.row])-1)
+			}
+			li = m.LineInfo()
+		}
+	} else {
+		// Moving up.
+		for i := 0; i < -delta; i++ {
+			if li.RowOffset <= 0 && m.row > 0 {
+				m.row--
+				m.col = len(m.value[m.row])
+			} else {
+				// Move the cursor to the end of the previous line.
+				m.col = li.StartColumn - trailingSpace
+			}
+			li = m.LineInfo()
+		}
+	}
+
+	nli := m.LineInfo()
+	m.col = nli.StartColumn
+
+	if nli.Width <= 0 {
+		m.repositionView()
+		return
+	}
+
+	offset := 0
+	for offset < charOffset {
+		if m.row >= len(m.value) || m.col >= len(m.value[m.row]) || offset >= nli.CharWidth-1 {
+			break
+		}
+		offset += rw.RuneWidth(m.value[m.row][m.col])
+		m.col++
+	}
+	m.repositionView()
+}
+
+// PageUp moves the cursor up by one page. First call snaps to the first visible
+// line, subsequent calls move up by a full page.
+func (m *Model) PageUp() {
+	// If not on the first visible line, snap to it.
+	if offset := m.viewport.YOffset() - m.cursorLineNumber(); offset < 0 {
+		m.setCursorLineRelative(offset)
+		return
+	}
+
+	// Already on first visible line, move up by a full page.
+	m.setCursorLineRelative(-m.height)
+}
+
+// PageDown moves the cursor down by one page. First call snaps to the last
+// visible line, subsequent calls move down by a full page.
+func (m *Model) PageDown() {
+	// If not on the last visible line, snap to it.
+	if offset := m.cursorLineNumber() - m.viewport.YOffset(); offset < m.height-1 {
+		m.setCursorLineRelative(m.height - 1 - offset)
+		return
+	}
+
+	// Already on last visible line, move down by a full page.
+	m.setCursorLineRelative(m.height)
+}
+
+func (m Model) memoizedWrap(runes []rune, width int) [][]rune {
+	if m.wrapCache == nil {
+		return wrap(runes, width)
+	}
+	key := fmt.Sprintf("%d:%s", width, string(runes))
+	if v, ok := m.wrapCache[key]; ok {
+		return v
+	}
+	v := wrap(runes, width)
+	m.wrapCache[key] = v
+	return v
 }
 
 // SetCursor moves the cursor to the given position. If the position is
@@ -654,7 +761,7 @@ func (m Model) LineInfo() LineInfo {
 // LineInfoAt computes the LineInfo at the specified row/column.
 // The caller is responsible for keeping row/col within bounds.
 func (m Model) LineInfoAt(row, col int) LineInfo {
-	grid := wrap(m.value[row], m.width)
+	grid := m.memoizedWrap(m.value[row], m.width)
 
 	// Find out which line we are currently on. This can be determined by the
 	// m.col and counting the number of runes that we need to skip.
@@ -671,19 +778,19 @@ func (m Model) LineInfoAt(row, col int) LineInfo {
 				RowOffset:    i + 1,
 				StartColumn:  col,
 				Width:        len(grid[i+1]),
-				CharWidth:    rw.StringWidth(string(line)),
+				CharWidth:    uniseg.StringWidth(string(line)),
 			}
 		}
 
 		if counter+len(line) >= col {
 			return LineInfo{
-				CharOffset:   rw.StringWidth(string(line[:max(0, col-counter)])),
+				CharOffset:   uniseg.StringWidth(string(line[:max(0, col-counter)])),
 				ColumnOffset: col - counter,
 				Height:       len(grid),
 				RowOffset:    i,
 				StartColumn:  counter,
 				Width:        len(line),
-				CharWidth:    rw.StringWidth(string(line)),
+				CharWidth:    uniseg.StringWidth(string(line)),
 			}
 		}
 
@@ -740,14 +847,14 @@ func (m *Model) SetWidth(w int) {
 	// prompt and line numbers, we need to calculate it by subtracting.
 	inputWidth := w
 	if m.ShowLineNumbers {
-		inputWidth -= rw.StringWidth(fmt.Sprintf(m.lineNumberFormat, 0))
+		inputWidth -= uniseg.StringWidth(fmt.Sprintf(m.lineNumberFormat, 0))
 	}
 
 	// Account for base style borders and padding.
 	inputWidth -= m.style.Base.GetHorizontalFrameSize()
 
 	if m.promptFunc == nil {
-		m.promptWidth = rw.StringWidth(m.Prompt)
+		m.promptWidth = uniseg.StringWidth(m.Prompt)
 	}
 
 	inputWidth -= m.promptWidth
@@ -887,6 +994,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.moveToBegin()
 		case key.Matches(msg, m.KeyMap.InputEnd):
 			m.moveToEnd()
+		case key.Matches(msg, m.KeyMap.PageUp):
+			m.PageUp()
+		case key.Matches(msg, m.KeyMap.PageDown):
+			m.PageDown()
 
 		default:
 			m.insertRunesFromUserInput([]rune(msg.Text))
@@ -941,7 +1052,7 @@ func (m Model) View() string {
 
 	displayLine := 0
 	for l, line := range highlightedValue {
-		wrappedLines := wrap(line, m.width)
+		wrappedLines := m.memoizedWrap(line, m.width)
 
 		// Wrap the highlighted version of this line to match the structure
 		var wrappedHighlightedLines []string
@@ -973,7 +1084,7 @@ func (m Model) View() string {
 				}
 			}
 
-			strwidth := rw.StringWidth(string(wrappedLine))
+			strwidth := uniseg.StringWidth(string(wrappedLine))
 			padding := m.width - strwidth
 			// If the trailing space causes the line to be wider than the
 			// width, we should not draw it to the screen since it will result
@@ -1111,7 +1222,7 @@ func (m Model) getPromptString(displayLine int) (prompt string) {
 		return prompt
 	}
 	prompt = m.promptFunc(displayLine)
-	pl := rw.StringWidth(prompt)
+	pl := uniseg.StringWidth(prompt)
 	if pl < m.promptWidth {
 		prompt = fmt.Sprintf("%*s%s", m.promptWidth-pl, "", prompt)
 	}
@@ -1139,7 +1250,7 @@ func (m Model) placeholderView() string {
 	s.WriteString(m.style.CursorLine.Render(m.Cursor.View()))
 
 	// The rest of the placeholder text
-	s.WriteString(m.style.CursorLine.Render(style.Render(p[1:] + strings.Repeat(" ", max(0, m.width-rw.StringWidth(p))))))
+	s.WriteString(m.style.CursorLine.Render(style.Render(p[1:] + strings.Repeat(" ", max(0, m.width-uniseg.StringWidth(p))))))
 
 	// The rest of the new lines
 	for i := 1; i < m.height; i++ {
@@ -1170,7 +1281,7 @@ func (m Model) cursorLineNumber() int {
 	for i := 0; i < m.row; i++ {
 		// Calculate the number of lines that the current line will be split
 		// into.
-		line += len(wrap(m.value[i], m.width))
+		line += len(m.memoizedWrap(m.value[i], m.width))
 	}
 	line += m.LineInfo().RowOffset
 	return line
@@ -1262,7 +1373,7 @@ func wrap(runes []rune, width int) [][]rune {
 		}
 
 		if spaces > 0 {
-			if rw.StringWidth(string(lines[row]))+rw.StringWidth(string(word))+spaces > width {
+			if uniseg.StringWidth(string(lines[row]))+uniseg.StringWidth(string(word))+spaces > width {
 				row++
 				lines = append(lines, []rune{})
 				lines[row] = append(lines[row], word...)
@@ -1279,7 +1390,7 @@ func wrap(runes []rune, width int) [][]rune {
 			// If the last character is a double-width rune, then we may not be able to add it to this line
 			// as it might cause us to go past the width.
 			lastCharLen := rw.RuneWidth(word[len(word)-1])
-			if rw.StringWidth(string(word))+lastCharLen > width {
+			if uniseg.StringWidth(string(word))+lastCharLen > width {
 				// If the current line has any content, let's move to the next
 				// line because the current word fills up the entire line.
 				if len(lines[row]) > 0 {
@@ -1292,7 +1403,7 @@ func wrap(runes []rune, width int) [][]rune {
 		}
 	}
 
-	if rw.StringWidth(string(lines[row]))+rw.StringWidth(string(word))+spaces >= width {
+	if uniseg.StringWidth(string(lines[row]))+uniseg.StringWidth(string(word))+spaces >= width {
 		lines = append(lines, []rune{})
 		lines[row+1] = append(lines[row+1], word...)
 		// We add an extra space at the end of the line to account for the
