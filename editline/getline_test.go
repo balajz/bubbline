@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/Balaji01-4D/bubbline"
+	"github.com/balajz/bubbline"
 )
 
 func TestBubblineBasic(t *testing.T) {

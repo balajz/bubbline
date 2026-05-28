@@ -8,8 +8,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/Balaji01-4D/bubbline/computil"
-	"github.com/Balaji01-4D/bubbline/editline"
+	"github.com/balajz/bubbline/computil"
+	"github.com/balajz/bubbline/editline"
 	"github.com/alecthomas/chroma/v2/quick"
 )
 

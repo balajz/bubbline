@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Balaji01-4D/bubbline/editline"
+	"github.com/balajz/bubbline/editline"
 )
 
 func LoadHistory(fileName string) ([]editline.HistoryEntry, error) {

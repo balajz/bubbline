@@ -17,8 +17,8 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/Balaji01-4D/bubbline/complete"
-	"github.com/Balaji01-4D/bubbline/editline/internal/textarea"
+	"github.com/balajz/bubbline/complete"
+	"github.com/balajz/bubbline/editline/internal/textarea"
 	rw "github.com/mattn/go-runewidth"
 	"github.com/muesli/reflow/wordwrap"
 )

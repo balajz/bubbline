@@ -3,8 +3,8 @@ package editline
 import (
 	"sort"
 
-	"github.com/Balaji01-4D/bubbline/complete"
-	"github.com/Balaji01-4D/bubbline/computil"
+	"github.com/balajz/bubbline/complete"
+	"github.com/balajz/bubbline/computil"
 	rw "github.com/mattn/go-runewidth"
 )
 

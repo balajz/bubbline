@@ -1,4 +1,4 @@
-module github.com/Balaji01-4D/bubbline
+module github.com/balajz/bubbline
 
 go 1.25.0
 
@@ -28,5 +28,6 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/sahilm/fuzzy v0.1.2 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
+	golang.org/x/exp v0.0.0-20231226003508-02704c960a9b // indirect
 	golang.org/x/sync v0.20.0 // indirect
 )

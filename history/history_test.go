@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Balaji01-4D/bubbline/editline"
+	"github.com/balajz/bubbline/editline"
 )
 
 var (
