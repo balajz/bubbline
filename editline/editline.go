@@ -1167,7 +1167,7 @@ func (m Model) View() string {
 	if m.currentlySearching() {
 		buf.WriteByte('\n')
 		buf.WriteString(m.hctrl.pattern.View())
-	} else if !m.helpDisabled {
+	} else if !m.helpDisabled && m.help.ShowAll {
 		buf.WriteByte('\n')
 		buf.WriteString(m.help.View(m))
 	}
