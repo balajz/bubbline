@@ -46,8 +46,6 @@ type KeyMap struct {
 	DeleteBeforeCursor      key.Binding
 	DeleteCharacterBackward key.Binding
 	DeleteCharacterForward  key.Binding
-	DeleteWordBackward      key.Binding
-	DeleteWordForward       key.Binding
 	InsertNewline           key.Binding
 	LineEnd                 key.Binding
 	LineNext                key.Binding
@@ -58,12 +56,6 @@ type KeyMap struct {
 	WordForward             key.Binding
 	InputBegin              key.Binding
 	InputEnd                key.Binding
-	ToggleOverwriteMode     key.Binding
-
-	TransposeCharacterBackward key.Binding
-	UppercaseWordForward       key.Binding
-	LowercaseWordForward       key.Binding
-	CapitalizeWordForward      key.Binding
 }
 
 // DefaultKeyMap is the default set of key bindings for navigating and acting
@@ -75,8 +67,6 @@ var DefaultKeyMap = KeyMap{
 	WordBackward:            key.NewBinding(key.WithKeys("alt+left", "ctrl+left", "alt+b"), key.WithHelp("M-b/C-←", "prev word")),
 	LineNext:                key.NewBinding(key.WithKeys("down", "ctrl+n"), key.WithHelp("C-n/↓", "move down")),
 	LinePrevious:            key.NewBinding(key.WithKeys("up", "ctrl+p"), key.WithHelp("C-p/↑", "move up")),
-	DeleteWordBackward:      key.NewBinding(key.WithKeys("alt+backspace", "ctrl+w"), key.WithHelp("C-w/M-bksp", "del prev word")),
-	DeleteWordForward:       key.NewBinding(key.WithKeys("alt+delete", "alt+d"), key.WithHelp("M-d/M-del", "del next word")),
 	DeleteAfterCursor:       key.NewBinding(key.WithKeys("ctrl+k"), key.WithHelp("C-k", "del line end")),
 	DeleteBeforeCursor:      key.NewBinding(key.WithKeys("ctrl+u"), key.WithHelp("C-u", "del line start")),
 	InsertNewline:           key.NewBinding(key.WithKeys("enter", "ctrl+m", "ctrl+j"), key.WithHelp("C-m/⤶", "new line/enter")),
@@ -88,13 +78,6 @@ var DefaultKeyMap = KeyMap{
 	InputBegin:              key.NewBinding(key.WithKeys("alt+<", "ctrl+home"), key.WithHelp("M-</C-home", "go to begin")),
 	InputEnd: key.NewBinding(key.WithKeys("alt+>", "ctrl+end"),
 		key.WithHelp("M->/C-end", "go to end")),
-
-	TransposeCharacterBackward: key.NewBinding(key.WithKeys("ctrl+t"), key.WithHelp("C-t", "transpose char")),
-	CapitalizeWordForward:      key.NewBinding(key.WithKeys("alt+c"), key.WithHelp("M-c", "capitalize word")),
-	LowercaseWordForward:       key.NewBinding(key.WithKeys("alt+l"), key.WithHelp("M-l", "lowercase word")),
-	UppercaseWordForward:       key.NewBinding(key.WithKeys("alt+u"), key.WithHelp("M-u", "uppercase word")),
-
-	ToggleOverwriteMode: key.NewBinding(key.WithKeys("insert", "alt+o"), key.WithHelp("M-o/ins", "toggle overwrite")),
 }
 
 // LineInfo is a helper for keeping track of line information regarding
@@ -220,9 +203,6 @@ type Model struct {
 	// focus indicates whether user input focus should be on this input
 	// component. When false, ignore keyboard input and hide the cursor.
 	focus bool
-
-	// overwrite indicates whether overwrite mode is currently enabled.
-	overwrite bool
 
 	// Cursor column.
 	col int
@@ -411,18 +391,6 @@ func (m *Model) insertRunesFromUserInput(runes []rune) {
 	m.SetCursor(m.col)
 }
 
-// overwriteRune overwrites the rune at the cursor position.
-func (m *Model) overwriteRune(r rune) {
-	// If we're at the end of the line, or if the input rune is a
-	// newline, simply insert it.  Otherwise, overwrite.
-	if r == '\n' || r == '\r' || (m.col >= len(m.value[m.row])) {
-		m.InsertRune(r)
-		return
-	}
-	m.value[m.row][m.col] = r
-	m.SetCursor(m.col + 1)
-}
-
 // Value returns the value of the text input.
 func (m Model) Value() string {
 	if m.value == nil {
@@ -594,93 +562,6 @@ func (m *Model) deleteAfterCursor() {
 	m.SetCursor(len(m.value[m.row]))
 }
 
-// transposeLeft exchanges the runes at the cursor and immediately
-// before. No-op if the cursor is at the beginning of the line.  If
-// the cursor is not at the end of the line yet, moves the cursor to
-// the right.
-func (m *Model) transposeLeft() {
-	if m.col == 0 || len(m.value[m.row]) < 2 {
-		return
-	}
-	if m.col >= len(m.value[m.row]) {
-		m.SetCursor(m.col - 1)
-	}
-	m.value[m.row][m.col-1], m.value[m.row][m.col] = m.value[m.row][m.col], m.value[m.row][m.col-1]
-	if m.col < len(m.value[m.row]) {
-		m.SetCursor(m.col + 1)
-	}
-}
-
-// deleteWordLeft deletes the word left to the cursor. Returns whether or not
-// the cursor blink should be reset.
-func (m *Model) deleteWordLeft() {
-	if m.col == 0 || len(m.value[m.row]) == 0 {
-		return
-	}
-
-	// Linter note: it's critical that we acquire the initial cursor position
-	// here prior to altering it via SetCursor() below. As such, moving this
-	// call into the corresponding if clause does not apply here.
-	oldCol := m.col //nolint:ifshort
-
-	m.SetCursor(m.col - 1)
-	for unicode.IsSpace(m.value[m.row][m.col]) {
-		if m.col <= 0 {
-			break
-		}
-		// ignore series of whitespace before cursor
-		m.SetCursor(m.col - 1)
-	}
-
-	for m.col > 0 {
-		if !unicode.IsSpace(m.value[m.row][m.col]) {
-			m.SetCursor(m.col - 1)
-		} else {
-			if m.col > 0 {
-				// keep the previous space
-				m.SetCursor(m.col + 1)
-			}
-			break
-		}
-	}
-
-	if oldCol > len(m.value[m.row]) {
-		m.value[m.row] = m.value[m.row][:m.col]
-	} else {
-		m.value[m.row] = append(m.value[m.row][:m.col], m.value[m.row][oldCol:]...)
-	}
-}
-
-// deleteWordRight deletes the word right to the cursor.
-func (m *Model) deleteWordRight() {
-	if m.col >= len(m.value[m.row]) || len(m.value[m.row]) == 0 {
-		return
-	}
-
-	oldCol := m.col
-
-	for m.col < len(m.value[m.row]) && unicode.IsSpace(m.value[m.row][m.col]) {
-		// ignore series of whitespace after cursor
-		m.SetCursor(m.col + 1)
-	}
-
-	for m.col < len(m.value[m.row]) {
-		if !unicode.IsSpace(m.value[m.row][m.col]) {
-			m.SetCursor(m.col + 1)
-		} else {
-			break
-		}
-	}
-
-	if m.col > len(m.value[m.row]) {
-		m.value[m.row] = m.value[m.row][:oldCol]
-	} else {
-		m.value[m.row] = append(m.value[m.row][:oldCol], m.value[m.row][m.col:]...)
-	}
-
-	m.SetCursor(oldCol)
-}
-
 // characterRight moves the cursor one character to the right.
 func (m *Model) characterRight() {
 	if m.col < len(m.value[m.row]) {
@@ -763,34 +644,12 @@ func (m *Model) doWordRight(fn func(charIdx int, pos int)) {
 	}
 }
 
-// uppercaseRight changes the word to the right to uppercase.
-func (m *Model) uppercaseRight() {
-	m.doWordRight(func(_ int, i int) {
-		m.value[m.row][i] = unicode.ToUpper(m.value[m.row][i])
-	})
-}
-
-// lowercaseRight changes the word to the right to lowercase.
-func (m *Model) lowercaseRight() {
-	m.doWordRight(func(_ int, i int) {
-		m.value[m.row][i] = unicode.ToLower(m.value[m.row][i])
-	})
-}
-
-// capitalizeRight changes the word to the right to title case.
-func (m *Model) capitalizeRight() {
-	m.doWordRight(func(charIdx int, i int) {
-		if charIdx == 0 {
-			m.value[m.row][i] = unicode.ToTitle(m.value[m.row][i])
-		}
-	})
-}
-
 // LineInfo returns the number of characters from the start of the
 // (soft-wrapped) line and the (soft-wrapped) line width.
 func (m Model) LineInfo() LineInfo {
 	return m.LineInfoAt(m.row, m.col)
 }
+
 
 // LineInfoAt computes the LineInfo at the specified row/column.
 // The caller is responsible for keeping row/col within bounds.
@@ -1006,21 +865,6 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.DeleteCharactersBackward(1)
 		case key.Matches(msg, m.KeyMap.DeleteCharacterForward):
 			m.DeleteCharacterForward()
-		case key.Matches(msg, m.KeyMap.DeleteWordBackward):
-			if m.col <= 0 {
-				m.mergeLineAbove(m.row)
-				break
-			}
-			m.deleteWordLeft()
-		case key.Matches(msg, m.KeyMap.DeleteWordForward):
-			m.col = clamp(m.col, 0, len(m.value[m.row]))
-			if m.col >= len(m.value[m.row]) {
-				m.mergeLineBelow(m.row)
-				break
-			}
-			m.deleteWordRight()
-		case key.Matches(msg, m.KeyMap.InsertNewline):
-			m.InsertNewline()
 		case key.Matches(msg, m.KeyMap.LineEnd):
 			m.CursorEnd()
 		case key.Matches(msg, m.KeyMap.LineStart):
@@ -1043,26 +887,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.moveToBegin()
 		case key.Matches(msg, m.KeyMap.InputEnd):
 			m.moveToEnd()
-		case key.Matches(msg, m.KeyMap.LowercaseWordForward):
-			m.lowercaseRight()
-		case key.Matches(msg, m.KeyMap.UppercaseWordForward):
-			m.uppercaseRight()
-		case key.Matches(msg, m.KeyMap.CapitalizeWordForward):
-			m.capitalizeRight()
-		case key.Matches(msg, m.KeyMap.TransposeCharacterBackward):
-			m.transposeLeft()
-		case key.Matches(msg, m.KeyMap.ToggleOverwriteMode):
-			m.overwrite = !m.overwrite
 
 		default:
-			if !m.overwrite {
-				m.insertRunesFromUserInput([]rune(msg.Text))
-			} else {
-				runes := []rune(msg.Text)
-				for _, r := range runes {
-					m.overwriteRune(r)
-				}
-			}
+			m.insertRunesFromUserInput([]rune(msg.Text))
 		}
 
 	case pasteMsg:

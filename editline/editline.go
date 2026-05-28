@@ -67,11 +67,7 @@ type KeyMap struct {
 	HistoryNext     key.Binding
 	Debug           key.Binding
 	HideShowPrompt  key.Binding
-	AlwaysNewline   key.Binding
-	AlwaysComplete  key.Binding
 	MoreHelp        key.Binding
-	ReflowLine      key.Binding
-	ReflowAll       key.Binding
 	ExternalEdit    key.Binding
 }
 
@@ -79,8 +75,6 @@ type KeyMap struct {
 var DefaultKeyMap = KeyMap{
 	KeyMap: textarea.DefaultKeyMap,
 
-	AlwaysNewline:   key.NewBinding(key.WithKeys("ctrl+0"), key.WithHelp("C-0", "force newline")),
-	AlwaysComplete:  key.NewBinding(key.WithKeys("alt+enter", "alt+\r"), key.WithHelp("M-⤶/M-C-m", "force complete")),
 	AutoComplete:    key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "try autocomplete")),
 	Interrupt:       key.NewBinding(key.WithKeys("ctrl+c"), key.WithHelp("C-c", "clear/cancel")),
 	SignalQuit:      key.NewBinding(key.WithKeys(`ctrl+\`)),
@@ -93,8 +87,6 @@ var DefaultKeyMap = KeyMap{
 	HistoryPrevious: key.NewBinding(key.WithKeys("alt+p"), key.WithHelp("M-p", "prev history entry"), key.WithDisabled()),
 	HistoryNext:     key.NewBinding(key.WithKeys("alt+n"), key.WithHelp("M-n", "next history entry"), key.WithDisabled()),
 	MoreHelp:        key.NewBinding(key.WithKeys("ctrl+h"), key.WithHelp("C-h", "toggle key help")),
-	ReflowLine:      key.NewBinding(key.WithKeys("alt+q"), key.WithHelp("M-q", "reflow line")),
-	ReflowAll:       key.NewBinding(key.WithKeys("alt+Q", "alt+`"), key.WithHelp("M-S-q/M-`", "reflow all")),
 	Debug:           key.NewBinding(key.WithKeys("ctrl+_", "ctrl+@"), key.WithHelp("C-_/C-@", "debug mode"), key.WithDisabled()),
 	ExternalEdit:    key.NewBinding(key.WithKeys("ctrl+o"), key.WithHelp("C-.", "external edit")),
 }
@@ -128,17 +120,6 @@ type Model struct {
 	// Placeholder is displayed when the editor is still empty.
 	// Only takes effect at Reset() or Focus().
 	Placeholder string
-
-	// CheckInputComplete is called when the Enter key is pressed.  It
-	// determines whether a newline character should be added to the
-	// input (callback returns false) or whether the input should
-	// terminate altogether (callback returns true). The callback is
-	// provided the text of the input and the line number at which the
-	// cursor is currently positioned as argument.
-	//
-	// The default behavior if CheckInputComplete is nil is to terminate
-	// the input when enter is pressed.
-	CheckInputComplete func(entireInput [][]rune, line, col int) bool
 
 	// AutoComplete is the AutoCompleteFn to use.
 	AutoComplete AutoCompleteFn
@@ -187,11 +168,6 @@ type Model struct {
 	// after the first one.
 	// Only takes effect at Reset().
 	NextPrompt string
-
-	// Reflow, if defined, is used for the reflowing commands (M-q/M-Q).
-	// The info returned value, if any, is displayed as an informational
-	// message above the editor.
-	Reflow func(all bool, currentText string, targetWidth int) (changed bool, newText, info string)
 
 	// SearchPrompt is the prompt displayed before the history search pattern.
 	SearchPrompt string
@@ -259,7 +235,6 @@ func New(width, height int) *Model {
 		Err:                     nil,
 		KeyMap:                  DefaultKeyMap,
 		MaxHistorySize:          0, // no limit
-		Reflow:                  DefaultReflow,
 		DedupHistory:            true,
 		DeleteCharIfNotEOF:      true,
 		AddSpaceAfterCompletion: true, // default to true for backward compatibility
@@ -746,51 +721,6 @@ func (m *Model) setWidth(w int) {
 	m.help.SetWidth(w - 1)
 }
 
-// DefaultReflow is the default/initial value of Reflow.
-func DefaultReflow(
-	allText bool, currentText string, targetWidth int,
-) (changed bool, newText, info string) {
-	if rw.StringWidth(currentText) <= targetWidth {
-		return false, currentText, ""
-	}
-	return true, wordwrap.String(currentText, targetWidth), ""
-}
-
-// reflowLine reflows the current line.
-func (m *Model) reflowLine() (cmd tea.Cmd) {
-	if m.Reflow == nil {
-		return nil
-	}
-	s := m.text.CurrentLine()
-	changed, newText, info := m.Reflow(false /*all*/, s, m.text.Width()-1)
-	if !changed {
-		return nil
-	}
-	m.text.ClearLine()
-	m.text.InsertString(newText)
-	if info != "" {
-		cmd = tea.Println(info)
-	}
-	return tea.Batch(cmd, m.updateTextSz())
-}
-
-// reflowAll reflows the entire text.
-func (m *Model) reflowAll() (cmd tea.Cmd) {
-	if m.Reflow == nil {
-		return nil
-	}
-	s := m.text.Value()
-	changed, newText, info := m.Reflow(true /*all*/, s, m.text.Width()-1)
-	if !changed {
-		return nil
-	}
-	m.text.SetValue(newText)
-	if info != "" {
-		cmd = tea.Println(info)
-	}
-	return tea.Batch(cmd, m.updateTextSz())
-}
-
 // handleSearching navigates through the history search.
 func (m *Model) handleSearching(imsg tea.Msg) (stillSearching bool, restMsg tea.Msg, cmd tea.Cmd) {
 	switch msg := imsg.(type) {
@@ -810,10 +740,6 @@ func (m *Model) handleSearching(imsg tea.Msg) (stillSearching bool, restMsg tea.
 		case key.Matches(msg, m.KeyMap.SearchBackward):
 			m.incrementalSearch(true /* nextMatch */)
 			return true, nil, nil
-
-		case key.Matches(msg, m.KeyMap.AlwaysComplete):
-			m.acceptSearch()
-			return false, imsg, nil
 
 		case key.Matches(msg, m.KeyMap.InsertNewline):
 			m.acceptSearch()
@@ -1059,23 +985,9 @@ func (m *Model) Update(imsg tea.Msg) (*Model, tea.Cmd) {
 			}
 			m.text.SetValue("")
 
-		case key.Matches(msg, m.KeyMap.AlwaysNewline):
-			m.text.InsertNewline()
-			imsg = nil // consume message
-
-		case key.Matches(msg, m.KeyMap.AlwaysComplete):
-			stop = true
-			imsg = nil // consume message
-
 		case key.Matches(msg, m.KeyMap.InsertNewline):
-			if m.CheckInputComplete == nil ||
-				m.CheckInputComplete(m.text.ValueRunes(), m.text.Line(), m.text.CursorPos()) {
-				stop = true
-
-				// Avoid processing the enter key, for otherwise it may insert
-				// an excess newline in the middle of the input.
-				imsg = nil // consume message
-			}
+			stop = true
+			imsg = nil
 
 		case key.Matches(msg, m.KeyMap.LinePrevious):
 			if m.text.AtFirstLineOfInputAndView() {
@@ -1088,14 +1000,6 @@ func (m *Model) Update(imsg tea.Msg) (*Model, tea.Cmd) {
 				m.historyDown()
 				imsg = nil // consume message
 			}
-
-		case key.Matches(msg, m.KeyMap.ReflowLine):
-			cmd = tea.Batch(cmd, m.reflowLine())
-			imsg = nil
-
-		case key.Matches(msg, m.KeyMap.ReflowAll):
-			cmd = tea.Batch(cmd, m.reflowAll())
-			imsg = nil
 		}
 	}
 
@@ -1201,12 +1105,10 @@ func (m Model) FullHelp() [][]key.Binding {
 			k.WordForward,
 			k.InputEnd,
 			key.NewBinding(key.WithKeys("_"), key.WithHelp("del", "del next char")), // k.DeleteCharacterForward,
-			k.DeleteWordForward,
 			k.LineEnd,
 			k.DeleteAfterCursor,
 			k.LineNext,
 			k.HistoryNext,
-			k.ReflowLine,
 			k.HideShowPrompt,
 		},
 		{
@@ -1215,24 +1117,16 @@ func (m Model) FullHelp() [][]key.Binding {
 			k.WordBackward,
 			k.InputBegin,
 			k.DeleteCharacterBackward,
-			k.DeleteWordBackward,
 			k.LineStart,
 			k.DeleteBeforeCursor,
 			k.LinePrevious,
 			k.HistoryPrevious,
-			k.ReflowAll,
 			k.Debug,
 		},
 		{
 			k.InsertNewline,
-			k.AlwaysNewline,
-			k.AlwaysComplete,
 			k.Refresh,
 			key.NewBinding(key.WithKeys("_"), key.WithHelp("C-d", "del next char/EOF")),
-			k.ToggleOverwriteMode,
-			k.TransposeCharacterBackward,
-			k.LowercaseWordForward,
-			k.UppercaseWordForward,
 			k.SearchBackward,
 			k.AutoComplete,
 			k.ExternalEdit,
