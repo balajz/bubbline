@@ -464,7 +464,7 @@ func (m *Model) CursorDown() {
 		if m.col > len(m.value[m.row]) || offset >= nli.CharWidth-1 {
 			break
 		}
-		offset += rw.RuneWidth(m.value[m.row][m.col])
+		offset += uniseg.StringWidth(string(m.value[m.row][m.col]))
 		m.col++
 	}
 }
@@ -498,7 +498,7 @@ func (m *Model) CursorUp() {
 		if m.col >= len(m.value[m.row]) || offset >= nli.CharWidth-1 {
 			break
 		}
-		offset += rw.RuneWidth(m.value[m.row][m.col])
+		offset += uniseg.StringWidth(string(m.value[m.row][m.col]))
 		m.col++
 	}
 }
@@ -556,7 +556,7 @@ func (m *Model) setCursorLineRelative(delta int) {
 		if m.row >= len(m.value) || m.col >= len(m.value[m.row]) || offset >= nli.CharWidth-1 {
 			break
 		}
-		offset += rw.RuneWidth(m.value[m.row][m.col])
+		offset += uniseg.StringWidth(string(m.value[m.row][m.col]))
 		m.col++
 	}
 	m.repositionView()
@@ -652,6 +652,7 @@ func (m *Model) Reset() {
 	m.row = 0
 	m.viewport.GotoTop()
 	m.SetCursor(0)
+	m.wrapCache = make(map[string][][]rune)
 }
 
 // deleteBeforeCursor deletes all text before the cursor. Returns whether or
@@ -972,6 +973,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.DeleteCharactersBackward(1)
 		case key.Matches(msg, m.KeyMap.DeleteCharacterForward):
 			m.DeleteCharacterForward()
+		case key.Matches(msg, m.KeyMap.InsertNewline):
+			m.InsertNewline()
 		case key.Matches(msg, m.KeyMap.LineEnd):
 			m.CursorEnd()
 		case key.Matches(msg, m.KeyMap.LineStart):
@@ -1389,7 +1392,7 @@ func wrap(runes []rune, width int) [][]rune {
 		} else {
 			// If the last character is a double-width rune, then we may not be able to add it to this line
 			// as it might cause us to go past the width.
-			lastCharLen := rw.RuneWidth(word[len(word)-1])
+			lastCharLen := uniseg.StringWidth(string(word[len(word)-1]))
 			if uniseg.StringWidth(string(word))+lastCharLen > width {
 				// If the current line has any content, let's move to the next
 				// line because the current word fills up the entire line.

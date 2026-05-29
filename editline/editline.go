@@ -121,6 +121,17 @@ type Model struct {
 	// Only takes effect at Reset() or Focus().
 	Placeholder string
 
+	// CheckInputComplete is called when the Enter key is pressed.  It
+	// determines whether a newline character should be added to the
+	// input (callback returns false) or whether the input should
+	// terminate altogether (callback returns true). The callback is
+	// provided the text of the input and the line number at which the
+	// cursor is currently positioned as argument.
+	//
+	// The default behavior if CheckInputComplete is nil is to terminate
+	// the input when enter is pressed.
+	CheckInputComplete func(entireInput [][]rune, line, col int) bool
+
 	// AutoComplete is the AutoCompleteFn to use.
 	AutoComplete AutoCompleteFn
 
@@ -986,8 +997,14 @@ func (m *Model) Update(imsg tea.Msg) (*Model, tea.Cmd) {
 			m.text.SetValue("")
 
 		case key.Matches(msg, m.KeyMap.InsertNewline):
-			stop = true
-			imsg = nil
+			if m.CheckInputComplete == nil ||
+				m.CheckInputComplete(m.text.ValueRunes(), m.text.Line(), m.text.CursorPos()) {
+				stop = true
+
+				// Avoid processing the enter key, for otherwise it may insert
+				// an excess newline in the middle of the input.
+				imsg = nil // consume message
+			}
 
 		case key.Matches(msg, m.KeyMap.LinePrevious):
 			if m.text.AtFirstLineOfInputAndView() {
