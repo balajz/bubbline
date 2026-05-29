@@ -596,6 +596,9 @@ func (m Model) memoizedWrap(runes []rune, width int) [][]rune {
 	if v, ok := m.wrapCache[key]; ok {
 		return v
 	}
+	if len(m.wrapCache) > 1000 {
+		m.wrapCache = make(map[string][][]rune)
+	}
 	v := wrap(runes, width)
 	m.wrapCache[key] = v
 	return v
